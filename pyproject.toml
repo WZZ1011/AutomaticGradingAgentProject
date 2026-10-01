@@ -12,6 +12,9 @@ dependencies = [
     "dotenv>=0.9.9",
     "fastapi>=0.141.1",
     "langchain>=1.4.2",
+    "passlib[bcrypt]>=1.7.4",
+    "python-jose[cryptography]>=3.5.0",
+    "python-multipart>=0.0.32",
     "sqlalchemy>=2.1.1",
     "uvicorn>=0.54.0",
 ]
