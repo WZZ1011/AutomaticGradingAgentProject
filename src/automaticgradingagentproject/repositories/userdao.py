@@ -1,9 +1,7 @@
-from automaticgradingagentproject.models.user import Student, Teacher
+from automaticgradingagentproject.models.user import User
 from automaticgradingagentproject.repositories.basedao import BaseRepository
 
 
-class StudentDao(BaseRepository[Student]):
-    model = Student
+class UserDao(BaseRepository[User]):
+    model = User
 
-class TeacherDao(BaseRepository[Teacher]):
-    model = Teacher
