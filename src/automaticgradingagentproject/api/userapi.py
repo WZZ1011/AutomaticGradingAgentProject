@@ -11,7 +11,7 @@ from automaticgradingagentproject.schemas.userschemas import Token, UserCreate, 
 from automaticgradingagentproject.services import userservice
 
 Base.metadata.create_all(bind=engine)
-userrouter = APIRouter()
+userrouter = APIRouter(prefix="/user")
 @userrouter.post("/register", response_model=UserOut, status_code=201)
 def register(user_in: UserCreate,db: Annotated[Session, Depends(get_db)]):
     return userservice.register(user_in,db)
