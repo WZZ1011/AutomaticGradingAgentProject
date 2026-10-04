@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class UserCreate(BaseModel):
@@ -8,11 +8,7 @@ class UserCreate(BaseModel):
 class UserOut(BaseModel):
     name:str
     user_id:str
-
-
-
-class Config:
-    from_attributes = True #允许从 ORM 对象直接构造这个模型
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Token(BaseModel):
