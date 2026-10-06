@@ -14,7 +14,7 @@ def register(user_in:UserCreate,db:Session):
    
     user = User(
         name=user_in.name,
-        user_id=auth.hash_password(user_in.user_id),
+        user_id=auth.hash_password_easy(user_in.user_id),
     )
     db.add(user)
     db.commit()
@@ -24,7 +24,7 @@ def register(user_in:UserCreate,db:Session):
 def login(form_data: OAuth2PasswordRequestForm,
     db: Session ):
     user = db.query(User).filter(User.name == form_data.username).first()
-    if not user or not auth.verify_password(form_data.password, user.user_id): # pyright: ignore[reportArgumentType]
+    if not user or not auth.verify_password_easy(form_data.password, user.user_id): # pyright: ignore[reportArgumentType]
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误",

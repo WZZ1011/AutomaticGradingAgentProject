@@ -16,7 +16,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
-
+def verify_password_easy(plain,hash):
+    return plain == hash
+def hash_password_easy(password):
+    return password
 def hash_password(password: str) -> str:
      # 将密码编码为 utf-8，bcrypt 需要字节串
     password_bytes = password.encode('utf-8')
