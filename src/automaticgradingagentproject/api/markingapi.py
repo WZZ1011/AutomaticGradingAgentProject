@@ -1,10 +1,13 @@
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from automaticgradingagentproject.core import auth
 from automaticgradingagentproject.core.database import Base, engine, get_db
+from automaticgradingagentproject.core.save_upload_file import save_upload_file
 from automaticgradingagentproject.models.user import User
 from automaticgradingagentproject.schemas import markingschemas
 from automaticgradingagentproject.services import marking_service
@@ -13,13 +16,14 @@ Base.metadata.create_all(bind=engine)
 marking_router = APIRouter(prefix="/marking")
 
 @marking_router.post("/upload",response_model=markingschemas.UploadResponse)
-def upload(upload_request:markingschemas.UploadRequest,db: Annotated[Session, Depends(get_db)],
-           current_user: Annotated[User, Depends(auth.get_current_user)]):
-    document=upload_request.document
-    source_code=upload_request.source_code
-    user_id=current_user.user_id
-    topic_id=upload_request.topic_id
-    return marking_service.upload_document_and_code(document,source_code,user_id,topic_id,db) # pyright: ignore[reportArgumentType]
+def upload( db: Annotated[Session, Depends(get_db)],
+            current_user: Annotated[User, Depends(auth.get_current_user)],document:Annotated[UploadFile,File()],
+            source_code: Annotated[UploadFile, File()],
+            topic_id: int = Form(...)):
+    doc_path = save_upload_file(document)       
+    code_path = save_upload_file(source_code)
+    user_id = current_user.user_id
+    return marking_service.upload_document_and_code(doc_path,code_path,user_id,topic_id,db) # pyright: ignore[reportArgumentType]
 
 
 @marking_router.post("/insert_topic",response_model=markingschemas.InsertTopicResponse)
@@ -71,18 +75,45 @@ def get_page_rule(get_page_rule_request:markingschemas.PaginationRequest,db:Anno
     return marking_service.get_topic_all_rule(db,page,size)
 
 
-@marking_router.get("/get_doc/{doc_id}",response_model=markingschemas.GetDocResponse)
+@marking_router.get("/download_doc/{doc_id}")
 def get_doc(doc_id:int,db:Annotated[Session,Depends(get_db)]
             , current_user: Annotated[User, Depends(auth.get_current_user)]):
-    return marking_service.get_document(db,doc_id)
+    doc = marking_service.get_document(db,doc_id)
+    file_path = Path(doc.word_doc) # pyright: ignore[reportArgumentType]
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    return FileResponse(
+        path=file_path,
+        filename=file_path.name,         
+        media_type="application/octet-stream",  
+    )
 
 
-@marking_router.get("/get_code/{code_id}",response_model=markingschemas.GetCodeResponse)
+@marking_router.get("/download_code/{code_id}")
 def get_code(code_id:int,db:Annotated[Session,Depends(get_db)]
              , current_user: Annotated[User, Depends(auth.get_current_user)]):
-    return marking_service.get_code(db,code_id)
+     code = marking_service.get_code(db,code_id)
+     file_path = Path(code.source_code) # pyright: ignore[reportArgumentType]
+     if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在")
+     return FileResponse(
+            path=file_path,
+            filename=file_path.name,         
+            media_type="application/octet-stream",  
+        )
+@marking_router.post("/list_doc",response_model=markingschemas.DocListResponse)
+def list_doc(list_doc_request:markingschemas.PaginationRequest,db:Annotated[Session,Depends(get_db)],
+             current_user: Annotated[User, Depends(auth.get_current_user)]):
+    page = list_doc_request.page
+    size = list_doc_request.size
+    return marking_service.get_page_doc(db,page,size)
 
-
+@marking_router.post("/list_code",response_model=markingschemas.CodeListResponse)
+def list_code(list_code_request:markingschemas.PaginationRequest,db:Annotated[Session,Depends(get_db)],
+             current_user: Annotated[User, Depends(auth.get_current_user)]):
+    page = list_code_request.page
+    size = list_code_request.size
+    return marking_service.get_page_code(db,page,size)
 @marking_router.post("/delete_doc",response_model=markingschemas.DeleteDocResponse)
 def delete_doc(delete_doc_request:markingschemas.DeleteDocRequest,db:Annotated[Session,Depends(get_db)]
                , current_user: Annotated[User, Depends(auth.get_current_user)]):

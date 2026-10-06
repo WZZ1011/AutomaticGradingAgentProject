@@ -7,12 +7,12 @@ from automaticgradingagentproject.models import marking
 from automaticgradingagentproject.repositories import markingdao
 
 
-def upload_document_and_code(document:str,source_code:str,user_id:str,topic_id:int,db:Session):
+def upload_document_and_code(document_path:str,source_code_path:str,user_id:str,topic_id:int,db:Session):
     """上传word文档和源代码
 
     Args:
-        document (str): word文档
-        source_code (str): 源代码
+        document (str): word文档的绝对路径
+        source_code (str): 源代码的绝对路径
         user_id (str): 使用者id/学号
         topic_id (int): 对应的专题
         db (Session): 数据库会话
@@ -20,20 +20,20 @@ def upload_document_and_code(document:str,source_code:str,user_id:str,topic_id:i
     Returns:
         doc.id(int) code.id(int): 文档id和源码id
     """
-    code_hash = _sha256(source_code)
-    doc_hash = _sha256(document)
+    code_hash = _sha256(source_code_path)
+    doc_hash = _sha256(document_path)
     
     doc_repo = markingdao.DocumentDao(db)
     code_repo = markingdao.CodeDao(db)
 
     doc = marking.Document(
-     word_doc=document,
+     word_doc=document_path,
      content_hash=doc_hash,
      user_id=user_id,
      topic_id=topic_id,
             )
     code = marking.Code(
-                source_code=source_code,
+                source_code=source_code_path,
                 content_hash=code_hash,
                 user_id=user_id,
                 topic_id=topic_id,
@@ -205,7 +205,26 @@ def get_topics(db:Session,page: int = 1, size: int = 20):
          "items":topics
     }
 
-
+def get_page_doc(db:Session,page:int = 1,size:int =20):
+     doc_repo = markingdao.DocumentDao(db)
+     total = doc_repo.count()
+     docs = doc_repo.list_all(page,size)
+     return {
+            "total": total,
+            "page":page,
+            "size":size,
+            "items":docs
+            }
+def get_page_code(db:Session,page:int = 1,size:int =20):
+     code_repo = markingdao.CodeDao(db)
+     total = code_repo.count()
+     codes = code_repo.list_all(page,size)
+     return {
+            "total": total,
+            "page":page,
+            "size":size,
+            "items":codes
+            }
 def get_topic_all_rule(db:Session,page: int = 1, size: int = 20):
     """获取规则列表（分页）
 

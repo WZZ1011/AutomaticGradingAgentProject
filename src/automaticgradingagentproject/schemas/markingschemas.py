@@ -1,12 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class UploadRequest(BaseModel):
-    document: str
-    source_code: str
-    user_id: str
-    topic_id: int
-
 class InsertTopicRuleRequest(BaseModel):
     name: str = Field(..., description="规则名称")
     description: str = Field(..., description="规则描述")
@@ -118,4 +112,18 @@ class DeleteDocResponse(BaseModel):
 class DeleteCodeResponse(BaseModel):
     ok:str
     model_config = ConfigDict(from_attributes=True)
-     
+
+
+class DocListResponse(BaseModel):
+    total: int = Field(..., description="总数量")
+    page: int = Field(..., description="当前页码")
+    size: int = Field(..., description="每页数量")
+    items: list[GetDocResponse] = Field(default_factory=list, description="规则列表")
+    model_config = ConfigDict(from_attributes=True)
+
+class CodeListResponse(BaseModel):
+    total: int = Field(..., description="总数量")
+    page: int = Field(..., description="当前页码")
+    size: int = Field(..., description="每页数量")
+    items: list[GetCodeResponse] = Field(default_factory=list, description="规则列表")
+    model_config = ConfigDict(from_attributes=True)
