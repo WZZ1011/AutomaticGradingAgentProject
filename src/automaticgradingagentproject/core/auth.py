@@ -14,7 +14,7 @@ SECRET_KEY = "dmperetadgagadfdag" #先写死硬编码
 ALGORITHM = "HS256" 
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/user/login")
 
 def verify_password_easy(plain,hash):
     return plain == hash
