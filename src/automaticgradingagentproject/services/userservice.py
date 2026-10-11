@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from automaticgradingagentproject.core import auth
 from automaticgradingagentproject.models.user import User
+from automaticgradingagentproject.repositories.userdao import UserDao
 from automaticgradingagentproject.schemas.userschemas import UserCreate
 
 
@@ -16,7 +17,8 @@ def register(user_in:UserCreate,db:Session):
         name=user_in.name,
         user_id=auth.hash_password_easy(user_in.user_id),
     )
-    db.add(user)
+    user_repo=UserDao(db)
+    user_repo.add(user)
     db.commit()
     db.refresh(user)
     return user
