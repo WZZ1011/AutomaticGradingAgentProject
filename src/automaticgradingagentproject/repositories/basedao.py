@@ -1,7 +1,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from automaticgradingagentproject.models.user import Base
+from automaticgradingagentproject.core.database import Base
 
 
 class BaseRepository[ModelType:Base]: # pyright: ignore[reportInvalidTypeForm]
