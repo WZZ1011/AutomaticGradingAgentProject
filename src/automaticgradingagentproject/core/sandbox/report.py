@@ -12,6 +12,9 @@ def pct(passed: int, total: int) -> str:
 
     不做四舍五入，直接截断到整数位。因为 pass_rate 只是给学生看的，
     防止出现199/200被直接判定为100%，而实际上是没完全通过的。
+
+    已确认口径（2026-10-20）：向下截断。代价是 1/200 显示 "0%"，
+    这是有意接受的；若要改成"四舍五入后夹在 1~99"，需要重新裁定。
     """
     if total == 0:
         return "0%"
@@ -20,7 +23,7 @@ def pct(passed: int, total: int) -> str:
 
 
 def fmt_seconds(seconds: float) -> str:
-    """"0.12s" 这种格式的字符串。同样是 str 不是 float。"""
+    """转成 "0.12s" 这种格式的字符串。同样是 str 不是 float。"""
     return f"{seconds:.2f}s"
 
 
@@ -43,8 +46,10 @@ def build_report(
         }
 
     约束：
-    - 本函数以及整个引擎层**不抛异常**：任何异常都要降级进 error_message。
-      上游 marking_service.get_code 是会直接 raise ValueError 的，门面层必须接住。
+    - 本函数**不主动 raise**，但只接受已归一过的入参（expected_outcome 必须是 list）：
+      None → [] 的归一由 sandbox_run_validation 负责，不要在这里再做一次防御。
+      对外"不抛异常、异常全部降级进 error_message"的责任在 services 门面层
+      （上游 marking_service.get_code 会直接 raise ValueError，门面必须接住）。
     - 三类失败不要混进同一个篮子：
         ① 编译失败                    → compilation_error_message
         ② 某用例超时 / 运行崩溃        → 该用例判错，**不**进 error_message
@@ -57,7 +62,10 @@ def build_report(
       别写成 `if not compile_result.ok`，那会 AttributeError。
 
     对空 cases 的处理原则是：照常产出完整 dict，不做特殊报错。
-    报"用例数量不一致"会把真实原因埋掉——建议只在 cases 非空时才做数量校验。
+    报"用例数量不一致"会把真实原因埋掉——只在 cases 非空时才做数量校验。
+
+    长度不一致的**唯一**记录点就是这里（zip 按短的截断 + append 一条错误）：
+    runner.run_all 不再重复记这条，避免同一条错误出现两次。
     """
     pairs = list(zip(expected_outcome, cases))
     comparisons = [diff_one(expected, case.stdout) for expected, case in pairs]
