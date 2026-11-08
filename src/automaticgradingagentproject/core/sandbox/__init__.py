@@ -9,18 +9,22 @@ code_id → 源码 的解析属于门面层（services）的事，不放在这�
 好处是引擎可以脱离 DB、脱离 Docker 单独测试。
 """
 
-from .backend import FakeBackend, SandboxBackend, SandboxInfrastructureError
+from .backend import (
+    DockerBackend,
+    FakeBackend,
+    SandboxBackend,
+    SandboxInfrastructureError,
+)
 from .config import SandboxConfig
 from .runner import sandbox_run_validation
 from .types import CaseResult, CompileResult
 
-# DockerBackend 暂不导出：execute/close 还是 NotImplementedError，
-# 等实现完再放开。现在导入它只会得到一个“看起来能用”的半成品。
 __all__ = [
     "sandbox_run_validation",
     "SandboxConfig",
     "SandboxBackend",
     "SandboxInfrastructureError",
+    "DockerBackend",
     "FakeBackend",
     "CaseResult",
     "CompileResult",

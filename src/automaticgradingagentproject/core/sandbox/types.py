@@ -27,5 +27,7 @@ class CaseResult:
 
     stdout: str        # 已按 output_limit 截断、已解码成 str
     elapsed: float     # 该用例运行耗时（秒）
-    timed_out: bool    # 是否被超时掐断
     exit_code: int
+    timed_out: bool    # 是否被超时掐断
+    truncated: bool = False  # stdout 是否因超过 output_limit 被截断
+    executed: bool = True    # False = 基础设施故障导致从未执行，其余字段是占位值

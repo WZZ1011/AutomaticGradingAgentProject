@@ -8,6 +8,21 @@ from .report import build_report
 from .types import CaseResult, CompileResult
 
 
+def _unrun_case() -> CaseResult:
+    """基础设施故障后补的占位结果。
+
+    executed=False 让 report 强制判错、且不计入 pass_rate / average_run_time；
+    exit_code=-1 让它照旧计入 running_no_result.count。
+    """
+    return CaseResult(
+        stdout="",
+        elapsed=0.0,
+        timed_out=False,
+        exit_code=-1,
+        executed=False,
+    )
+
+
 def compile_source(backend: SandboxBackend, source: str) -> CompileResult:
     """编译一次，原样返回 backend.compile 的结果。
 
@@ -29,8 +44,9 @@ def run_all(
     约束：
     - compile_result is None 或 ok=False → 不跑任何用例，直接返回 ([], [])。
       编译失败的短路在**这里**做，不在 compile_source。
-    - 保证"返回的 cases 与 test_cases 等长"：某个用例中途挂掉要补一条占位结果，
-      否则下游按 index 对不上号。
+    - 编译成功路径上保证"返回的 cases 与 test_cases 等长"：某个用例中途挂掉
+      要补一条占位结果，否则下游按 index 对不上号。编译失败时直接短路返回空列表，
+      这个长度保证**不成立**；长度不一致由 build_report 记录。
     - 每个用例**单独计时**，不要把总耗时平均下去。
     - expected_outcome 不参与执行，只在 build_report 里参与比对；
       它和 test_cases 长度不一致的报错**由 build_report 负责**，这里不要重复记。
@@ -49,7 +65,7 @@ def run_all(
     for stdin_text in test_cases:
         if infra_down:
             # 沙箱已经挂了就不再逐条重试，否则每个用例都要白等一次超时
-            cases.append(CaseResult(stdout="", elapsed=0.0, timed_out=False, exit_code=-1))
+            cases.append(_unrun_case())
             continue
         try:
             cases.append(backend.execute(stdin_text))
@@ -58,7 +74,7 @@ def run_all(
             errors.append(f"沙箱执行阶段不可用：{exc}")
             infra_down = True
             # 补占位，保证 cases 与 test_cases 等长，下游按 index 才对得上
-            cases.append(CaseResult(stdout="", elapsed=0.0, timed_out=False, exit_code=-1))
+            cases.append(_unrun_case())
 
     return cases, errors
 
@@ -104,5 +120,9 @@ def sandbox_run_validation(
 
         return build_report(cases, expected_outcome, compile_result, errors)
     finally:
-        # 一个 backend 实例只服务一次提交；close 契约要求幂等且不抛
-        backend.close()
+        # 一个 backend 实例只服务一次提交；close 契约要求幂等且不抛。
+        # 若第三方后端违约抛异常，也不能让它盖住真正的结果/异常。
+        try:
+            backend.close()
+        except Exception:
+            pass
