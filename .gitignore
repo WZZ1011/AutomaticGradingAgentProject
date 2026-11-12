@@ -15,7 +15,7 @@ wheels/
 *.txt
 
 
-.db
+*.db
 
 # promote
 context/

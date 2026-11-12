@@ -1,8 +1,8 @@
-"""create markinganduser tables
+"""initial
 
-Revision ID: 422dd05df697
-Revises: d8eb97603e43
-Create Date: 2026-10-02 16:50:21.192197
+Revision ID: 5b53cb96e6f7
+Revises: 
+Create Date: 2026-10-30 17:02:56.432628
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '422dd05df697'
-down_revision: Union[str, Sequence[str], None] = 'd8eb97603e43'
+revision: str = '5b53cb96e6f7'
+down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -34,6 +34,16 @@ def upgrade() -> None:
     op.create_index('idx_document_user_topic', 'document', ['user_id', 'topic_id'], unique=False)
     op.create_index(op.f('ix_document_topic_id'), 'document', ['topic_id'], unique=False)
     op.create_index(op.f('ix_document_user_id'), 'document', ['user_id'], unique=False)
+    op.create_table('llm_comment',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('student_name', sa.String(), nullable=False),
+    sa.Column('student_id', sa.String(), nullable=False),
+    sa.Column('document_id', sa.Integer(), nullable=False),
+    sa.Column('code_id', sa.Integer(), nullable=False),
+    sa.Column('topic_id', sa.Integer(), nullable=False),
+    sa.Column('comment', sa.String(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('rule',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('name', sa.String(), nullable=False),
@@ -89,6 +99,7 @@ def downgrade() -> None:
     op.drop_table('source_code')
     op.drop_index(op.f('ix_rule_topic_id'), table_name='rule')
     op.drop_table('rule')
+    op.drop_table('llm_comment')
     op.drop_index(op.f('ix_document_user_id'), table_name='document')
     op.drop_index(op.f('ix_document_topic_id'), table_name='document')
     op.drop_index('idx_document_user_topic', table_name='document')
