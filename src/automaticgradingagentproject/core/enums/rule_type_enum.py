@@ -26,5 +26,5 @@ class RuleTypeEnum(str,Enum):
     #-----沙盒模块-----
     RUNNING_NO_RESULT="running_no_result"
     # 沙箱运行无法得到结果（包含编译错误，超时，运行崩溃等沙盒非passed状态）
-    RUNNING_RESULT_ERROR="running_result_ERROR"
+    RUNNING_RESULT_ERROR="running_result_error"
     # 沙箱运行结果出错
