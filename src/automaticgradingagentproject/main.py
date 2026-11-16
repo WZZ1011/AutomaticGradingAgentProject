@@ -1,13 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from automaticgradingagentproject.api.agentapi import agent_router
 from automaticgradingagentproject.api.markingapi import marking_router
 from automaticgradingagentproject.api.userapi import userrouter
 
 app=FastAPI()
 app.include_router(userrouter)
 app.include_router(marking_router)
-
+app.include_router(agent_router)
 
 app.add_middleware(
     CORSMiddleware,
