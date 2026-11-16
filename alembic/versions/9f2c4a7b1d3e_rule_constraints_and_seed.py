@@ -25,7 +25,7 @@ SCORING_RULES: dict[str, str] = {
     "report_code_match": "报告中粘贴的核心代码与上传源码不一致",
     "ast_error": "源码未满足专题预设的 AST 规则",
     "running_no_result": "编译失败、超时、运行崩溃等无法得到结果",
-    "running_result_ERROR": "程序可运行，但输出或结果不符合预期",
+    "running_result_error": "程序可运行，但输出或结果不符合预期",
 }
 
 # 系统内置 AST 子规则：专题 id -> ((枚举名称, 枚举值), ...)。
