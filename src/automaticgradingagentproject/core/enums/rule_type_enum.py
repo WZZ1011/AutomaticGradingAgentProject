@@ -8,7 +8,7 @@ class RuleTypeEnum(str,Enum):
 
     #-----word文档模块-----
     FORMAT_ERROR="format_error"
-    #格式校验，标识所有格式校验项
+    #格式校验，标识所有格式校验项 
     CHAPTER_MISSING="chapter_missing"
     #章节缺失，文档中明显缺失一块必要章节
     REPORT_CODE_MATCH = "report_code_match"
@@ -20,6 +20,11 @@ class RuleTypeEnum(str,Enum):
     #-----AST模块-----
     AST_ERROR="ast_error"
     # AST静态检查时出现规则标准未达成
+
+
+    #-----文档语义模块-----
+    MEANING_ANALYSIS="meaning_analysis"
+    # 报告文本的逻辑自洽性，以及与 AST/沙箱反馈的一致性（A/B/C 三档）
 
 
     
