@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from ..enums.rule_type_enum import RuleTypeEnum
-from .parser import parse
+from .parser import SourceParseError, parse
 from .rules import CHECKS, RULE_BY_NAME
 
 
@@ -41,8 +41,10 @@ def _run_checks(source, selected):
 def validate_file(path, rules):
     selected = _selected(rules)
     path = Path(path)
-    if not path.is_absolute() or path.suffix.lower() != ".cpp":
+    if not path.is_absolute():
         raise ValueError("源码路径必须是 .cpp 文件的绝对路径")
+    if path.suffix.lower() != ".cpp":
+        raise SourceParseError("源码文件扩展名必须是 .cpp")
     data = path.read_bytes()
     try:
         source = data.decode("utf-8-sig")
@@ -57,4 +59,7 @@ def AST_validation(code_id):
         raise ValueError("code_id 必须是正整数")
     from .repository import submission
     path, rules = submission(code_id)
-    return validate_file(path, rules)
+    try:
+        return validate_file(path, rules)
+    except (SourceParseError, UnicodeDecodeError):
+        return {RuleTypeEnum.AST_ERROR.value: {"count": 0, "error_message": "parse_error"}}
