@@ -24,7 +24,8 @@ class Document(Base):
     __tablename__ = 'document'        
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    word_doc = Column(Text,nullable=False) 
+    word_doc = Column(Text,nullable=False)
+    file_name = Column(String(255), nullable=True)  # 上传时的原始文件名；历史行为 NULL
     content_hash = Column(String(64), unique=True, nullable=False)  # 去重靠 hash
     user_id = Column(String, index=True,nullable=False)
     topic_id = Column(Integer,index=True,nullable=False)
@@ -37,7 +38,8 @@ class Code(Base):
     __tablename__ = 'source_code'        
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    source_code = Column(Text,nullable=False) 
+    source_code = Column(Text,nullable=False)
+    file_name = Column(String(255), nullable=True)  # 上传时的原始文件名；历史行为 NULL
     content_hash = Column(String(64), unique=True, nullable=False)  # 去重靠 hash
     user_id = Column(String, index=True, nullable=False)
     topic_id =Column(Integer,index=True,nullable=False)

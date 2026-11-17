@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict, Field
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from automaticgradingagentproject.core.enums.rule_type_enum import RuleTypeEnum
 
@@ -113,16 +115,32 @@ class DeleteTopicResponse(BaseModel):
     
 class GetDocResponse(BaseModel):
     id:int
-    word_doc:str
+    file_name: str | None = Field(None, description="上传时的原始文件名")
     user_id:str
+    student_name: str | None = Field(None, description="上传者姓名（按学号查 User）")
     topic_id:int
+    created_at: datetime | None = None
+
+    @computed_field
+    @property
+    def download_url(self) -> str:
+        return f"/marking/download_doc/{self.id}"
+
     model_config = ConfigDict(from_attributes=True)
 
-class GetCodeResponse(BaseModel):   
+class GetCodeResponse(BaseModel):
      id:int
-     source_code:str
+     file_name: str | None = Field(None, description="上传时的原始文件名")
      user_id:str
+     student_name: str | None = Field(None, description="上传者姓名（按学号查 User）")
      topic_id:int
+     created_at: datetime | None = None
+
+     @computed_field
+     @property
+     def download_url(self) -> str:
+          return f"/marking/download_code/{self.id}"
+
      model_config = ConfigDict(from_attributes=True)
 
 class DeleteDocResponse(BaseModel):

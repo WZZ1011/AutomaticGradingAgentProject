@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -12,16 +14,18 @@ from automaticgradingagentproject.core.rule_types import (
     normalize_rule_type,
     validate_rule_weights,
 )
+from automaticgradingagentproject.core.save_upload_file import SavedUpload
 from automaticgradingagentproject.models import marking, user
 from automaticgradingagentproject.repositories import markingdao
 
 
-def upload_document_and_code(document_path:str,source_code_path:str,user_id:str,topic_id:int,db:Session):
+def upload_document_and_code(document: SavedUpload, source_code: SavedUpload,
+                             user_id: str, topic_id: int, db: Session):
     """上传word文档和源代码
 
     Args:
-        document (str): word文档的绝对路径
-        source_code (str): 源代码的绝对路径
+        document (SavedUpload): word文档的落盘结果（绝对路径 + 原始文件名）
+        source_code (SavedUpload): 源代码的落盘结果（绝对路径 + 原始文件名）
         user_id (str): 使用者id/学号
         topic_id (int): 对应的专题
         db (Session): 数据库会话
@@ -29,52 +33,43 @@ def upload_document_and_code(document_path:str,source_code_path:str,user_id:str,
     Returns:
         doc.id(int) code.id(int): 文档id和源码id
     """
-    code_hash = _sha256(source_code_path)
-    doc_hash = _sha256(document_path)
-    
-    doc_repo = markingdao.DocumentDao(db)
-    code_repo = markingdao.CodeDao(db)
+    # 姓名只查一次，供 LLMComment 使用
+    stmt = select(user.User.name).where(user.User.user_id == user_id)
+    student_name = db.execute(stmt).scalar()
+    if student_name is None:
+        raise ValueError(f"用户 {user_id} 不存在，无法确定学生姓名")
 
     doc = marking.Document(
-     word_doc=document_path,
-     content_hash=doc_hash,
+     word_doc=document.path,
+     file_name=document.file_name,
+     content_hash=_sha256(document.path),
      user_id=user_id,
      topic_id=topic_id,
             )
     code = marking.Code(
-                source_code=source_code_path,
-                content_hash=code_hash,
+                source_code=source_code.path,
+                file_name=source_code.file_name,
+                content_hash=_sha256(source_code.path),
                 user_id=user_id,
                 topic_id=topic_id,
             )
-    doc_repo.add(doc)
-    code_repo.add(code)
-    try:
-            db.commit()
-          
-    except IntegrityError:
-            db.rollback()
-            # 处理重复:可以是返回已存在记录,或抛出自定义异常
-            raise
 
-    #往LLMComment里面放入必要的数据，为批阅核心函数做准备
-    stmt=select(user.User.name).where(user.User.user_id==user_id)
-    student_name=db.execute(stmt).scalar()
-    llm_comment_repo=markingdao.LLMCommentDao(db)
-    new_LLMComment=marking.LLMComment(
-         student_name=student_name,
-         student_id=user_id,
-         document_id=doc.id,
-         code_id=code.id,
-         topic_id=topic_id,
-         comment=""
-    )
-    llm_comment_repo.add(new_LLMComment)
-    try:            
+    # 一次事务：doc/code/llm_comment 要么全部落库，要么全部回滚
+    try:
+        db.add_all([doc, code])
+        db.flush()  # 拿到 doc.id / code.id
+        db.add(marking.LLMComment(
+            student_name=student_name,
+            student_id=user_id,
+            document_id=doc.id,
+            code_id=code.id,
+            topic_id=topic_id,
+            comment="",
+        ))
         db.commit()
-    except IntegrityError:
-         db.rollback()
-         raise 
+    except Exception:
+        db.rollback()
+        raise
     return {"doc_id":doc.id,"code_id":code.id}
 
 
@@ -304,25 +299,54 @@ def get_topics(db:Session,page: int = 1, size: int = 20):
          "items":topics
     }
 
+def _student_names(db: Session, user_ids: set[str]) -> dict[str, str]:
+    """按 user_id 批量查姓名；列表分页只需要一次查询。"""
+    if not user_ids:
+        return {}
+    rows = db.execute(
+        select(user.User.user_id, user.User.name).where(user.User.user_id.in_(user_ids))
+    ).all()
+    return dict(rows)
+
+
 def get_page_doc(db:Session,page:int = 1,size:int =20):
      doc_repo = markingdao.DocumentDao(db)
      total = doc_repo.count()
-     docs = doc_repo.list_all(page,size)
+     docs = doc_repo.list_all(page,size,order_by=marking.Document.id.desc())
+     names = _student_names(db, {d.user_id for d in docs})
+     items = [{
+          "id": d.id,
+          # 历史行没有原始文件名，回退为磁盘 basename
+          "file_name": d.file_name or Path(d.word_doc).name,
+          "user_id": d.user_id,
+          "student_name": names.get(d.user_id),
+          "topic_id": d.topic_id,
+          "created_at": d.created_at,
+     } for d in docs]
      return {
             "total": total,
             "page":page,
             "size":size,
-            "items":docs
+            "items":items
             }
 def get_page_code(db:Session,page:int = 1,size:int =20):
      code_repo = markingdao.CodeDao(db)
      total = code_repo.count()
-     codes = code_repo.list_all(page,size)
+     codes = code_repo.list_all(page,size,order_by=marking.Code.id.desc())
+     names = _student_names(db, {c.user_id for c in codes})
+     items = [{
+          "id": c.id,
+          "file_name": c.file_name or Path(c.source_code).name,
+          "user_id": c.user_id,
+          "student_name": names.get(c.user_id),
+          "topic_id": c.topic_id,
+          "created_at": c.created_at,
+     } for c in codes]
      return {
             "total": total,
             "page":page,
             "size":size,
-            "items":codes
+            "items":items
             }
 def get_topic_all_rule(db: Session, page: int = 1, size: int = 20,
                        topic_id: int | None = None):

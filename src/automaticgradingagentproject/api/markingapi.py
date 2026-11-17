@@ -22,10 +22,20 @@ def upload( db: Annotated[Session, Depends(get_db)],
             current_user: Annotated[User, Depends(auth.get_current_user)],document:Annotated[UploadFile,File()],
             source_code: Annotated[UploadFile, File()],
             topic_id: int = Form(...)):
-    doc_path = save_upload_file(document)       
-    code_path = save_upload_file(source_code)
-    user_id = current_user.user_id
-    return marking_service.upload_document_and_code(doc_path,code_path,user_id,topic_id,db) # pyright: ignore[reportArgumentType]
+    document_saved = save_upload_file(document)
+    source_saved = None
+    try:
+        source_saved = save_upload_file(source_code)
+        user_id = current_user.user_id
+        return marking_service.upload_document_and_code(
+            document_saved, source_saved, user_id, topic_id, db
+        )
+    except Exception:
+        # 数据库写入失败时清理刚落盘的文件，避免留下无主文件
+        for saved in (document_saved, source_saved):
+            if saved is not None:
+                Path(saved.path).unlink(missing_ok=True)
+        raise
 
 
 @marking_router.post("/insert_topic",response_model=markingschemas.InsertTopicResponse)
@@ -109,8 +119,8 @@ def get_doc(doc_id:int,db:Annotated[Session,Depends(get_db)]
         raise HTTPException(status_code=404, detail="文件不存在")
     return FileResponse(
         path=file_path,
-        filename=file_path.name,         
-        media_type="application/octet-stream",  
+        filename=doc.file_name or file_path.name,
+        media_type="application/octet-stream",
     )
 
 
@@ -125,8 +135,8 @@ def get_code(code_id:int,db:Annotated[Session,Depends(get_db)]
         raise HTTPException(status_code=404, detail="文件不存在")
      return FileResponse(
             path=file_path,
-            filename=file_path.name,         
-            media_type="application/octet-stream",  
+            filename=code.file_name or file_path.name,
+            media_type="application/octet-stream",
         )
 @marking_router.post("/list_doc",response_model=markingschemas.DocListResponse)
 def list_doc(list_doc_request:markingschemas.PaginationRequest,db:Annotated[Session,Depends(get_db)],
