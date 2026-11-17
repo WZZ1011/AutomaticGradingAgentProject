@@ -14,5 +14,13 @@ wheels/
 *.log
 *.txt
 
+
+*.db
+*.db.bak
+*.db.bak.20261113181432
 # promote
 context/
+
+.claude/settings.local.json
+
+notes/

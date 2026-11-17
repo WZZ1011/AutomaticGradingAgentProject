@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from automaticgradingagentproject.core import auth
 from automaticgradingagentproject.core.database import Base, engine, get_db
+from automaticgradingagentproject.core.rule_types import rule_type_items
 from automaticgradingagentproject.core.save_upload_file import save_upload_file
 from automaticgradingagentproject.models.user import User
 from automaticgradingagentproject.schemas import markingschemas
@@ -21,10 +22,20 @@ def upload( db: Annotated[Session, Depends(get_db)],
             current_user: Annotated[User, Depends(auth.get_current_user)],document:Annotated[UploadFile,File()],
             source_code: Annotated[UploadFile, File()],
             topic_id: int = Form(...)):
-    doc_path = save_upload_file(document)       
-    code_path = save_upload_file(source_code)
-    user_id = current_user.user_id
-    return marking_service.upload_document_and_code(doc_path,code_path,user_id,topic_id,db) # pyright: ignore[reportArgumentType]
+    document_saved = save_upload_file(document)
+    source_saved = None
+    try:
+        source_saved = save_upload_file(source_code)
+        user_id = current_user.user_id
+        return marking_service.upload_document_and_code(
+            document_saved, source_saved, user_id, topic_id, db
+        )
+    except Exception:
+        # 数据库写入失败时清理刚落盘的文件，避免留下无主文件
+        for saved in (document_saved, source_saved):
+            if saved is not None:
+                Path(saved.path).unlink(missing_ok=True)
+        raise
 
 
 @marking_router.post("/insert_topic",response_model=markingschemas.InsertTopicResponse)
@@ -48,6 +59,14 @@ def insert_rule(insert_rule_request:markingschemas.InsertTopicRuleRequest,db: An
     weight = insert_rule_request.weight
     topic_id = insert_rule_request.topic_id
     return marking_service.insert_topic_rule(name,description,weight,topic_id,db)
+
+
+@marking_router.get("/rule_types", response_model=markingschemas.RuleTypeListResponse)
+def get_rule_types(current_user: Annotated[User, Depends(auth.get_current_user)]):
+    """返回教师可配置的 6 个固定评分规则类型，供前端渲染固定行。"""
+    if current_user.user_id not in ALLOWED_USER_IDS:
+        raise HTTPException(status_code=403, detail="无权限")
+    return markingschemas.RuleTypeListResponse(items=rule_type_items())
 
 
 @marking_router.post("/update_topic/{topic_id}",response_model=markingschemas.TopicResponse)
@@ -79,13 +98,14 @@ def get_page_topic(get_page_topic_request:markingschemas.PaginationRequest,db:An
 
 
 @marking_router.post("/get_page_rule",response_model=markingschemas.RuleListResponse)
-def get_page_rule(get_page_rule_request:markingschemas.PaginationRequest,db:Annotated[Session,Depends(get_db)]
+def get_page_rule(get_page_rule_request:markingschemas.GetPageRuleRequest,db:Annotated[Session,Depends(get_db)]
                   , current_user: Annotated[User, Depends(auth.get_current_user)]):
     if current_user.user_id not in ALLOWED_USER_IDS:
         raise HTTPException(status_code=403,detail="无权限")
     page=get_page_rule_request.page
     size=get_page_rule_request.size
-    return marking_service.get_topic_all_rule(db,page,size)
+    topic_id=get_page_rule_request.topic_id
+    return marking_service.get_topic_all_rule(db,page,size,topic_id)
 
 
 @marking_router.get("/download_doc/{doc_id}")
@@ -99,8 +119,8 @@ def get_doc(doc_id:int,db:Annotated[Session,Depends(get_db)]
         raise HTTPException(status_code=404, detail="文件不存在")
     return FileResponse(
         path=file_path,
-        filename=file_path.name,         
-        media_type="application/octet-stream",  
+        filename=doc.file_name or file_path.name,
+        media_type="application/octet-stream",
     )
 
 
@@ -115,8 +135,8 @@ def get_code(code_id:int,db:Annotated[Session,Depends(get_db)]
         raise HTTPException(status_code=404, detail="文件不存在")
      return FileResponse(
             path=file_path,
-            filename=file_path.name,         
-            media_type="application/octet-stream",  
+            filename=code.file_name or file_path.name,
+            media_type="application/octet-stream",
         )
 @marking_router.post("/list_doc",response_model=markingschemas.DocListResponse)
 def list_doc(list_doc_request:markingschemas.PaginationRequest,db:Annotated[Session,Depends(get_db)],

@@ -14,4 +14,9 @@ class TopicDao(BaseRepository[marking.Topic]):
 
 class RuleDao(BaseRepository[marking.Rule]):
     model = marking.Rule
-    updatable_fields = {"name", "description", "weight", "topic_id"}
+    # 规则类型和所属专题创建后不可修改，只允许调整权重/描述。
+    updatable_fields = {"weight", "description"}
+
+class LLMCommentDao(BaseRepository[marking.LLMComment]):
+    model=marking.LLMComment
+    updatable_fields = {"comment"}
