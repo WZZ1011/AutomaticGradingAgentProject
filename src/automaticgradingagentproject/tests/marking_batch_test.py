@@ -406,6 +406,37 @@ def test_score_applies_running_no_result():
     assert result == 75
 
 
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        # 未找到标识：无论 count 多少都扣满。
+        ({"count": 0, "checked": False}, 70),
+        ({"count": 1, "checked": False}, 70),
+        ({"count": 3, "checked": False}, 70),
+        ({"count": 1}, 70),
+        ({"count": 0}, 70),
+        # 已检查：按 count 映射等级 0/1/2。
+        ({"count": 0, "checked": True}, 100),
+        ({"count": 1, "checked": True}, 90),
+        ({"count": 2, "checked": True}, 80),
+        ({"count": 3, "checked": True}, 80),
+        ({"count": 5, "checked": True}, 80),
+        # count 缺失/非法/负数按 0 处理。
+        ({"checked": True}, 100),
+        ({"checked": True, "count": -1}, 100),
+        ({"checked": True, "count": "2"}, 100),
+    ],
+)
+def test_score_report_code_match_maps_de_level(payload, expected):
+    result = score_(
+        {RuleTypeEnum.REPORT_CODE_MATCH: 30},
+        100,
+        {RuleTypeEnum.REPORT_CODE_MATCH: payload},
+        {}, {}, {},
+    )
+    assert result == expected
+
+
 def test_score_meaning_grade_a_no_deduction():
     result = score_(
         {RuleTypeEnum.MEANING_ANALYSIS: 20}, 100, {}, {}, {},

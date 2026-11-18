@@ -9,6 +9,19 @@ def _weight_percent(weight: dict, rule_type: RuleTypeEnum) -> float:
     return value or 0
 
 
+def _report_code_match_de_level(value: dict) -> int:
+    """把 report_code_match 的 checked/count 综合映射为扣分等级（0-3）。"""
+    # 没有找到代码片段标识，视为未检查/不遵守前置规则，直接扣满。
+    if value.get("checked") is not True:
+        return 3
+    count = value.get("count", 0)
+    if not isinstance(count, int) or count < 0:
+        count = 0
+    if count >= 2:
+        return 2
+    return count  # 0 -> 0，1 -> 1
+
+
 def score_(weight: dict, total_score: int, word_parsing_return: dict,
            ast_validation_return: dict, sandbox_validation_return: dict,
            meaning_validation_return: dict):
@@ -25,10 +38,10 @@ def score_(weight: dict, total_score: int, word_parsing_return: dict,
             max_hits = 2
             deduction = calculation_deduction(deduction, count, max_hits, score_proportion)
         elif key == RuleTypeEnum.REPORT_CODE_MATCH:
-            count = value["count"]
+            de_level = _report_code_match_de_level(value)
             score_proportion = _weight_percent(weight, RuleTypeEnum.REPORT_CODE_MATCH) / 100 * total_score
             max_hits = 3
-            deduction = calculation_deduction(deduction, count, max_hits, score_proportion)
+            deduction = calculation_deduction(deduction, de_level, max_hits, score_proportion)
 
     for key, value in ast_validation_return.items():
         if key == RuleTypeEnum.AST_ERROR:
@@ -71,10 +84,10 @@ def score_(weight: dict, total_score: int, word_parsing_return: dict,
 
 
 
-def calculation_deduction(deduction:float,count:int,max_hits:int,score_proportion:float):
+def calculation_deduction(deduction:float,de_level:int,max_hits:int,score_proportion:float):
     unit_penalty = score_proportion/max_hits
-    if count>max_hits:
+    if de_level>max_hits:
         deduction+=max_hits*unit_penalty
     else:
-        deduction+=count*unit_penalty
+        deduction+=de_level*unit_penalty
     return deduction
