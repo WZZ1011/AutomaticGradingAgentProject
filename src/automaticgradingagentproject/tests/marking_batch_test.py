@@ -519,7 +519,11 @@ async def test_llm_meaning_analysis_invalid_output(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_graph_runs_meaning_analysis(monkeypatch):
+    engine_calls = []
+    meaning_calls = []
+
     async def fake_meaning(doc, ast, sandbox):
+        meaning_calls.append(doc)
         return {
             RuleTypeEnum.MEANING_ANALYSIS.value: {
                 "count": 1,
@@ -530,6 +534,13 @@ async def test_graph_runs_meaning_analysis(monkeypatch):
     async def fake_comment(*args):
         return "测试评语"
 
+    def fake_engine(doc_id, code_id):
+        engine_calls.append((doc_id, code_id))
+        return {
+            "full_text": "全文",
+            "word_parsing_return": {"contents": {"总结": "这是总结"}},
+        }
+
     monkeypatch.setattr(agent_service, "llm_meaning_analysis", fake_meaning)
     monkeypatch.setattr(agent_service, "llm_comment_", fake_comment)
     monkeypatch.setattr(
@@ -539,11 +550,13 @@ async def test_graph_runs_meaning_analysis(monkeypatch):
         agent_service, "sandbox_runing_validation",
         lambda code_id, test_cases, expected: {},
     )
+    monkeypatch.setattr(agent_service, "doc_parsing_engine", fake_engine)
 
     state = {
         "basic": {"id": 1, "doc_id": 1, "code_id": 1, "topic_id": 1},
         "teacher_config": TEACHER_CONFIG,
         "word_parsing_return": {"contents": {"总结": "这是总结"}},
+        "full_text": "",
         "ast_validation_return": {},
         "sandbox_validation_return": {},
         "meaning_validation_return": {},
@@ -560,3 +573,10 @@ async def test_graph_runs_meaning_analysis(monkeypatch):
     # 语义权重 10%，B 档扣一半 → 95 分
     assert result["output"]["score"] == 95
     assert result["llm_comment"] == "测试评语"
+    assert engine_calls == [(1, 1)]
+    assert meaning_calls == [
+        {
+            "full_text": "全文",
+            "word_parsing_return": {"contents": {"总结": "这是总结"}},
+        }
+    ]

@@ -16,11 +16,50 @@ from automaticgradingagentproject.core.enums.sandbox_status_enum import (
 load_dotenv()
 llm=init_chat_model("deepseek:deepseek-chat")
 
+_MAX_FULL_TEXT_CHARS = 20000
+
+
+def _doc_parts(material_doc: dict) -> tuple[dict, str]:
+    """兼容两种文档材料形态：{full_text, word_parsing_return} 或旧的平铺 dict。"""
+    if not isinstance(material_doc, dict):
+        return {}, ""
+    inner = material_doc.get("word_parsing_return")
+    if isinstance(inner, dict):
+        return inner, str(material_doc.get("full_text") or "")
+    return material_doc, str(material_doc.get("full_text") or "")
+
+
+def _rule_material(material_doc: dict) -> dict:
+    """只保留规则计数，剔除 contents/full_text 大文本（评语节点用）。"""
+    payload, _ = _doc_parts(material_doc)
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in ("contents", "full_text")
+    }
+
+
+def _has_real_contents(contents: object) -> bool:
+    """六个 chapter_none_* 不算内容；至少要有一个真实章节。"""
+    if not isinstance(contents, dict):
+        return False
+    return any(
+        not str(key).startswith("chapter_none_")
+        and value not in (None, "none", "")
+        for key, value in contents.items()
+    )
+
+
+def _truncate(text: str) -> str:
+    if len(text) <= _MAX_FULL_TEXT_CHARS:
+        return text
+    return text[:_MAX_FULL_TEXT_CHARS] + "\n……（内容过长，已截断）"
+
 
 async def llm_comment_(material_doc:dict,material_ast:dict,material_sandbox:dict,material_meaning:dict,score:int):
     messages=[
     HumanMessage(content=f"文本材料如下:\n"
-                         f"{json.dumps(material_doc,ensure_ascii=False,default=str,indent=2)}\n"
+                         f"{json.dumps(_rule_material(material_doc),ensure_ascii=False,default=str,indent=2)}\n"
                          f"{json.dumps(material_ast,ensure_ascii=False,default=str,indent=2)}\n"
                          f"{json.dumps(material_sandbox,ensure_ascii=False,default=str,indent=2)}\n"
                          f"{json.dumps(material_meaning,ensure_ascii=False,default=str,indent=2)}\n"
@@ -68,9 +107,19 @@ async def llm_meaning_analysis(material_doc: dict, material_ast: dict,
     - B：逻辑自洽但与其他模块反馈不符（count=1）
     - C：章节之间存在逻辑不自洽（count=2）
     """
-    contents = material_doc.get("contents") if isinstance(material_doc, dict) else None
-    if not contents:
+    payload, full_text = _doc_parts(material_doc)
+    contents = payload.get("contents")
+    if not _has_real_contents(contents) and not full_text:
         return _meaning_report("缺少文档章节内容，无法进行语义分析")
+
+    if full_text:
+        document_label = "报告全文"
+        document_excerpt = _truncate(full_text)
+    else:
+        document_label = "报告章节内容"
+        document_excerpt = _truncate(
+            json.dumps(contents or {}, ensure_ascii=False, default=str, indent=2)
+        )
 
     prompt = (
         "请判断下面这份学生数据结构报告的逻辑自洽性，只需要输出 A、B、C 中的一个字母。\n\n"
@@ -80,8 +129,8 @@ async def llm_meaning_analysis(material_doc: dict, material_ast: dict,
         "（例如报告声称已实现某功能，但检查结果显示未实现）；\n"
         "C：报告不同章节之间存在逻辑上的不自洽"
         "（例如功能设计、功能代码、调试与测试三部分互相矛盾）。\n\n"
-        f"报告章节内容：\n{json.dumps(contents, ensure_ascii=False, default=str, indent=2)}\n\n"
-        f"文档结构反馈：\n{json.dumps(material_doc, ensure_ascii=False, default=str, indent=2)}\n\n"
+        f"{document_label}（最多 {_MAX_FULL_TEXT_CHARS} 字）：\n{document_excerpt}\n\n"
+        f"文档结构反馈：\n{json.dumps(_rule_material(material_doc), ensure_ascii=False, default=str, indent=2)}\n\n"
         f"代码静态检查反馈：\n{json.dumps(material_ast, ensure_ascii=False, default=str, indent=2)}\n\n"
         f"运行测试反馈：\n{json.dumps(material_sandbox, ensure_ascii=False, default=str, indent=2)}\n\n"
         "只输出一个字母，不要输出任何解释。"

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from typing_extensions import TypedDict
 
 from automaticgradingagentproject.core.ast_validation.service import AST_validation
+from automaticgradingagentproject.core.doc_parsing import doc_parsing as doc_parsing_engine
 from automaticgradingagentproject.core.graph_start_imformation import (
     get_basic,
     get_teacher_config,
@@ -31,6 +32,7 @@ logger=logging.getLogger(__name__)
 class State(TypedDict):
     basic:dict
     word_parsing_return:dict
+    full_text:str
     ast_validation_return:dict
     sandbox_validation_return:dict
     meaning_validation_return:dict
@@ -41,7 +43,13 @@ class State(TypedDict):
 
 
 def doc_parsing(state:State):
-    pass
+    answer = doc_parsing_engine(
+        state["basic"]["doc_id"], state["basic"]["code_id"]
+    )
+    return {
+        "word_parsing_return": answer["word_parsing_return"],
+        "full_text": answer["full_text"],
+    }
 def sandbox_running_validation(state:State):
     code_id=state["basic"]["code_id"]
     answer=sandbox_runing_validation(code_id,[],[])
@@ -52,8 +60,12 @@ def ast_validation(state:State):
     answer=AST_validation(code_id)
     return {"ast_validation_return": answer}
 async def meaning_analysis(state:State):
+    material = {
+        "full_text": state.get("full_text", ""),
+        "word_parsing_return": state["word_parsing_return"],
+    }
     answer = await llm_meaning_analysis(
-        state["word_parsing_return"],
+        material,
         state["ast_validation_return"],
         state["sandbox_validation_return"],
     )
@@ -109,6 +121,7 @@ async def marking_batch(db:Session, topic_id:int):
         "basic": basic,
         "teacher_config": teacher_config,
         "word_parsing_return": {},
+        "full_text": "",
         "ast_validation_return": {},
         "sandbox_validation_return": {},
         "meaning_validation_return": {},

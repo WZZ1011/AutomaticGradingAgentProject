@@ -9,11 +9,21 @@ def _weight_percent(weight: dict, rule_type: RuleTypeEnum) -> float:
     return value or 0
 
 
+def _unwrap_word_parsing(material: object) -> dict:
+    """兼容 {full_text, word_parsing_return} 与旧的内层/平铺 dict。"""
+    if not isinstance(material, dict):
+        return {}
+    inner = material.get("word_parsing_return")
+    if isinstance(inner, dict):
+        return inner
+    return material
+
+
 def score_(weight: dict, total_score: int, word_parsing_return: dict,
            ast_validation_return: dict, sandbox_validation_return: dict,
            meaning_validation_return: dict):
     deduction = 0
-    for key, value in word_parsing_return.items():
+    for key, value in _unwrap_word_parsing(word_parsing_return).items():
         if key == RuleTypeEnum.FORMAT_ERROR:
             count = value["count"]
             score_proportion = _weight_percent(weight, RuleTypeEnum.FORMAT_ERROR) / 100 * total_score
