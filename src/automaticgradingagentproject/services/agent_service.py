@@ -6,18 +6,22 @@ from sqlalchemy.orm import Session
 from typing_extensions import TypedDict
 
 from automaticgradingagentproject.core.ast_validation.service import AST_validation
+from automaticgradingagentproject.core.chapter_reconsider import (
+    apply_chapter_reviews,
+)
 from automaticgradingagentproject.core.graph_start_imformation import (
     get_basic,
     get_teacher_config,
 )
 from automaticgradingagentproject.core.llm_invoke import (
+    llm_chapter_reconsider,
     llm_comment_,
     llm_meaning_analysis,
 )
 from automaticgradingagentproject.core.sandbox.validation_service import (
     sandbox_runing_validation,
 )
-from automaticgradingagentproject.core.score import score_
+from automaticgradingagentproject.core.score import score_report
 from automaticgradingagentproject.models.marking import (
     Code,
     Document,
@@ -31,6 +35,7 @@ logger=logging.getLogger(__name__)
 class State(TypedDict):
     basic:dict
     word_parsing_return:dict
+    full_text:str
     ast_validation_return:dict
     sandbox_validation_return:dict
     meaning_validation_return:dict
@@ -41,7 +46,56 @@ class State(TypedDict):
 
 
 def doc_parsing(state:State):
+    # TODO: 解析 Word 后返回 {"word_parsing_return": {...}, "full_text": "..."}；
+    # chapter_missing 需同时提供 count 和 missing（规范章节名）。
     pass
+
+
+def route_after_doc_parsing(state:State) -> str:
+    """只有存在缺失章节且有全文时才进入 LLM 复核。"""
+    word_parsing_return = state.get("word_parsing_return") or {}
+    chapter = word_parsing_return.get("chapter_missing")
+    if not isinstance(chapter, dict):
+        return "chapter_review_done"
+
+    count = chapter.get("count")
+    missing = chapter.get("missing")
+    full_text = state.get("full_text") or ""
+    if (
+        isinstance(count, int)
+        and not isinstance(count, bool)
+        and count > 0
+        and isinstance(missing, list)
+        and missing
+        and full_text.strip()
+    ):
+        return "llm_reconsider"
+    return "chapter_review_done"
+
+
+async def llm_reconsider(state:State) -> dict:
+    material_doc = state.get("word_parsing_return") or {}
+    full_text = state.get("full_text") or ""
+    try:
+        result = await llm_chapter_reconsider(full_text, material_doc)
+        patched = apply_chapter_reviews(
+            material_doc,
+            result.get("reviews") or [],
+            full_text,
+            error_message=result.get("error_message"),
+        )
+    except Exception:
+        # 复核只是补正逻辑，任何意外都不能让整条批阅失败。
+        logger.exception("章节复核失败，保持解析器原判")
+        return {"word_parsing_return": material_doc}
+    return {"word_parsing_return": patched}
+
+
+def chapter_review_done(state:State) -> dict:
+    """文档分支的汇合点：跳过复核时也走到这里，供 barrier 等待。"""
+    return {}
+
+
 def sandbox_running_validation(state:State):
     code_id=state["basic"]["code_id"]
     answer=sandbox_runing_validation(code_id,[],[])
@@ -59,14 +113,22 @@ async def meaning_analysis(state:State):
     )
     return {"meaning_validation_return": answer}
 def scoring(state:State):
-    answer = score_(state["teacher_config"]["weights"],state["teacher_config"]["total_score"],
-                    state["word_parsing_return"],state["ast_validation_return"],
-                    state["sandbox_validation_return"],state["meaning_validation_return"])
-    return {"output": {"score": answer}}
+    report = score_report(
+        state["teacher_config"]["weights"], state["teacher_config"]["total_score"],
+        state["word_parsing_return"], state["ast_validation_return"],
+        state["sandbox_validation_return"], state["meaning_validation_return"],
+    )
+    return {"output": {"score": report["final_score"], "report": report}}
 async def llm_comment(state:State):
-    answer=await llm_comment_(state["word_parsing_return"],state["ast_validation_return"],
-                              state["sandbox_validation_return"],state["meaning_validation_return"],
-                              state["output"]["score"])
+    output = state.get("output") or {}
+    answer=await llm_comment_(
+        state.get("word_parsing_return") or {},
+        state.get("ast_validation_return") or {},
+        state.get("sandbox_validation_return") or {},
+        state.get("meaning_validation_return") or {},
+        output.get("score", 0),
+        output.get("report"),
+    )
     if not isinstance(answer, str) or not answer.strip():
         raise ValueError("LLM 未返回有效评语")
     return {"llm_comment": answer}
@@ -75,16 +137,29 @@ builder=StateGraph(State)
 builder.add_node("doc_parsing",doc_parsing)
 builder.add_node("sandbox_running_validation",sandbox_running_validation)
 builder.add_node("ast_validation",ast_validation)
+builder.add_node("llm_reconsider",llm_reconsider)
+builder.add_node("chapter_review_done",chapter_review_done)
 builder.add_node("meaning_analysis",meaning_analysis)
 builder.add_node("scoring",scoring)
 builder.add_node("llm_comment",llm_comment)
 builder.add_edge(START,"doc_parsing")
 builder.add_edge(START,"sandbox_running_validation")
 builder.add_edge(START,"ast_validation")
-# 三个校验模块全部完成后，语义模块才能拿到 doc_parsing 的 contents。
-builder.add_edge("doc_parsing","meaning_analysis")
-builder.add_edge("sandbox_running_validation","meaning_analysis")
-builder.add_edge("ast_validation","meaning_analysis")
+# 文档分支：有缺失章节且存在全文时先复核，否则直接汇合。
+builder.add_conditional_edges(
+    "doc_parsing",
+    route_after_doc_parsing,
+    {
+        "llm_reconsider": "llm_reconsider",
+        "chapter_review_done": "chapter_review_done",
+    },
+)
+builder.add_edge("llm_reconsider","chapter_review_done")
+# barrier：等待文档分支、沙箱、AST 三路全部完成，避免复核被绕过或语义分析提前执行。
+builder.add_edge(
+    ["sandbox_running_validation","ast_validation","chapter_review_done"],
+    "meaning_analysis",
+)
 builder.add_edge("meaning_analysis","scoring")
 builder.add_edge("scoring","llm_comment")
 builder.add_edge("llm_comment",END)
@@ -109,6 +184,7 @@ async def marking_batch(db:Session, topic_id:int):
         "basic": basic,
         "teacher_config": teacher_config,
         "word_parsing_return": {},
+        "full_text": "",
         "ast_validation_return": {},
         "sandbox_validation_return": {},
         "meaning_validation_return": {},

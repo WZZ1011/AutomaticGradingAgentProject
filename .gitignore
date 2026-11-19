@@ -24,3 +24,9 @@ context/
 .claude/settings.local.json
 
 notes/
+
+.claude/
+
+CLAUDE.md
+app.db.bak.*
+problems/
