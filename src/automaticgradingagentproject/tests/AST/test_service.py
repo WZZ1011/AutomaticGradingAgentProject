@@ -49,3 +49,35 @@ def test_every_shared_rule_has_a_check():
     from automaticgradingagentproject.core.ast_validation.rules import CHECKS
 
     assert set(CHECKS) == set(R)
+
+
+@pytest.mark.parametrize(("filename", "content"), [
+    ("renamed.docx", b"int main() { return 0; }"),
+    ("no_extension", b"int main() { return 0; }"),
+    ("broken.cpp", b"int main( {"),
+    ("encoding.cpp", b"\xff\xfe"),
+])
+def test_submission_parse_errors_return_result(tmp_path, monkeypatch, filename, content):
+    from automaticgradingagentproject.core.ast_validation import repository
+
+    path = tmp_path / filename
+    path.write_bytes(content)
+    rules = [R.TOPIC1_NO_STD_SORT]
+    monkeypatch.setattr(repository, "submission", lambda code_id: (str(path), rules))
+    assert AST_validation(1) == {"ast_error": {"count": 0, "error_message": "parse_error"}}
+
+    # 一次提交解析失败后，后续合法提交仍能正常批阅。
+    valid_path = tmp_path / "valid.CPP"
+    valid_path.write_text("int main() { return 0; }", encoding="utf-8")
+    monkeypatch.setattr(repository, "submission", lambda code_id: (str(valid_path), rules))
+    assert AST_validation(2) == {"ast_error": {"count": 0, rules[0].value: {"count": 0}}}
+
+
+def test_unknown_rule_is_not_reported_as_student_parse_error(tmp_path, monkeypatch):
+    from automaticgradingagentproject.core.ast_validation import repository
+
+    path = tmp_path / "source.cpp"
+    path.write_text("int main() {}", encoding="utf-8")
+    monkeypatch.setattr(repository, "submission", lambda code_id: (str(path), ["unknown_rule"]))
+    with pytest.raises(ValueError, match="未知 AST 规则"):
+        AST_validation(1)
