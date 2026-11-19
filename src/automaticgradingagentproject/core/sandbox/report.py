@@ -58,6 +58,8 @@ def build_report(
     - running_no_result.count：编译失败或编译阶段不可用（compile_result 为 None）
       记 1 次；每个未执行（executed=False）、timed_out 或 exit_code != 0 的用例
       再记 1 次。
+      若 error_message 非空（基础设施/契约异常），该值归零并保持静默：
+      此时报告不可评分，count 不应成为扣分依据。
     - running_result_error.count：只数"拿到了可用结果、但比对不上"的用例
       （not timed_out and exit_code == 0 and 比对 false）。超时/崩溃的用例
       归 no_result，不在这里重复计数。
@@ -66,7 +68,8 @@ def build_report(
 
     未被执行的占位结果（runner 在基础设施故障后补的 CaseResult(executed=False)）
     保留在 differential_comparison 中并强制 true=False，以维持 index 对齐；
-    它们计入 running_no_result.count，但不进 pass_rate / average_run_time 的分母。
+    它们计入 running_no_result.count（error_message 非空时除外），
+    但不进 pass_rate / average_run_time 的分母。
 
     约束：
     - 本函数**不主动 raise**，但只接受已归一过的入参（expected_outcome 必须是 list）：
@@ -157,6 +160,11 @@ def build_report(
             no_result_count += 1
         elif index < len(comparisons) and not comparisons[index]["true"]:
             result_error_count += 1
+
+    # 基础设施/契约异常：报告不可评分，running_no_result.count 归零并保持静默。
+    # 学生编译失败走 compilation_error_message（error_message 为空），不受影响。
+    if error_message:
+        no_result_count = 0
 
     return {
         "running_no_result": {
