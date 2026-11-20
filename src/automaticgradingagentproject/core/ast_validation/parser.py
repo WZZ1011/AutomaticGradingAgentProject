@@ -2,9 +2,10 @@
 import re
 
 from tree_sitter import Language, Parser
+import tree_sitter_c
 import tree_sitter_cpp
 
-
+LANGUAGES = {"c": Language(tree_sitter_c.language()), "cpp": Language(tree_sitter_cpp.language())}
 LOOPS = ("for_statement", "while_statement", "do_statement", "for_range_loop")
 
 
@@ -28,8 +29,8 @@ def nodes(node, *kinds):
     return [item for item in walk(node) if item.type in kinds]
 
 
-def parse(source: str):
-    root = Parser(Language(tree_sitter_cpp.language())).parse(source.encode("utf-8")).root_node
+def parse(source: str, language="cpp"):
+    root = Parser(LANGUAGES[language]).parse(source.encode("utf-8")).root_node
     if root.has_error:
         # 缺失的分号等标点是匿名节点，不能只遍历 named_children。
         bad = root
@@ -38,7 +39,7 @@ def parse(source: str):
             if child is None:
                 break
             bad = child
-        raise SourceParseError(f"C++ 解析失败：第 {bad.start_point.row + 1} 行，第 {bad.start_point.column + 1} 字节列")
+        raise SourceParseError(f"源码解析失败：第 {bad.start_point.row + 1} 行，第 {bad.start_point.column + 1} 字节列")
     return root
 
 

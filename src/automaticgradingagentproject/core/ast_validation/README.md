@@ -1,4 +1,6 @@
-# C++ 作业的 AST 静态检查
+# C 和 C++ 作业的 AST 静态检查
+
+`AST_validation(code_id)` 和 `validate_file(path, rules)` 根据扩展名选择语法：`.c` 使用 C，`.cpp` 使用 C++，扩展名忽略大小写。两种语言共用下表中的评分规则。直接检查 C 源码字符串可调用 `validate_source(source, rules, language="c")`，省略语言时默认使用 C++。
 
 表中的名称省略了前缀，实际规则值以 `topic1.`、`topic2.` 或 `topic3.` 开头。
 
