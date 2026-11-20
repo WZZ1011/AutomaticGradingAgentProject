@@ -13,6 +13,15 @@ def test_avl_example():
     assert validate_source(TREE, RULES)["ast_error"]["count"] == 0
 
 
+def test_c_dictionary():
+    source = """
+        typedef struct { char word[32], meaning[64]; } Entry;
+        struct Node { Entry entry; struct Node *left, *right; };
+    """
+    rules = [R.TOPIC2_REQUIRE_TERM_STRUCT, R.TOPIC2_REQUIRE_BST_NODE_STRUCT, R.TOPIC2_NO_STD_MAP_AS_CORE]
+    assert validate_source(source, rules, language="c")["ast_error"]["count"] == 0
+
+
 @pytest.mark.parametrize(("code", "rule", "expected"), [
     ("struct E { char key[20]; char *meaning; };", R.TOPIC2_REQUIRE_TERM_STRUCT, 0),
     ("struct E { int key, meaning; };", R.TOPIC2_REQUIRE_TERM_STRUCT, 1),

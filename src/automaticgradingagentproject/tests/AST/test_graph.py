@@ -18,6 +18,28 @@ def test_graph_example():
     assert validate_source(GRAPH, RULES)["ast_error"]["count"] == 0
 
 
+def test_c_adjacency_list_and_shortest_path():
+    source = """
+        struct Edge { int to, weight; struct Edge *next; };
+        struct Vertex { struct Edge *head; };
+        void shortest(int n, struct Vertex graph[], int start, int d[]) {
+            int used[n];
+            for (int i=0; i<n; ++i) { d[i]=999999; used[i]=0; }
+            d[start]=0;
+            for (int k=0; k<n; ++k) {
+                int u=-1;
+                for (int i=0; i<n; ++i)
+                    if (!used[i] && (u<0 || d[i]<d[u])) u=i;
+                if (u<0 || d[u]==999999) break;
+                used[u]=1;
+                for (struct Edge *e=graph[u].head; e; e=e->next)
+                    if (d[u]+e->weight<d[e->to]) d[e->to]=d[u]+e->weight;
+            }
+        }
+    """
+    assert validate_source(source, [ADJ, DIJKSTRA], language="c")["ast_error"]["count"] == 0
+
+
 @pytest.mark.parametrize(("source", "rule", "expected"), [
     ("int matrix[50][50];", ADJ, 1),
     ("void f(int n){std::vector<std::vector<int>> adj(n,std::vector<int>(n));}", ADJ, 1),

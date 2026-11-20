@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from ..enums.rule_type_enum import RuleTypeEnum
-from .parser import SourceParseError, parse
+from .parser import LANGUAGES, SourceParseError, parse
 from .rules import CHECKS, RULE_BY_NAME
 
 
@@ -21,15 +21,17 @@ def _selected(items):
     return selected
 
 
-def validate_source(source: str, rules):
+def validate_source(source: str, rules, *, language="cpp"):
     """便于测试和本地调试，不需要数据库。"""
-    return _run_checks(source, _selected(rules))
+    if language not in LANGUAGES:
+        raise ValueError(f"不支持的源码语言：{language}")
+    return _run_checks(source, _selected(rules), language)
 
 
-def _run_checks(source, selected):
+def _run_checks(source, selected, language):
     if not selected:
         return {RuleTypeEnum.AST_ERROR.value: {"count": 0}}
-    root = parse(source)
+    root = parse(source, language)
     result = {"count": 0}
     for rule in selected:
         count = CHECKS[rule](root)
@@ -42,15 +44,16 @@ def validate_file(path, rules):
     selected = _selected(rules)
     path = Path(path)
     if not path.is_absolute():
-        raise ValueError("源码路径必须是 .cpp 文件的绝对路径")
-    if path.suffix.lower() != ".cpp":
-        raise SourceParseError("源码文件扩展名必须是 .cpp")
+        raise ValueError("源码路径必须是绝对路径")
+    language = path.suffix.lower().removeprefix(".")
+    if language not in LANGUAGES:
+        raise SourceParseError("源码文件扩展名必须是 .c 或 .cpp")
     data = path.read_bytes()
     try:
         source = data.decode("utf-8-sig")
     except UnicodeDecodeError:
         source = data.decode("gb18030")
-    return _run_checks(source, selected)
+    return _run_checks(source, selected, language)
 
 
 def AST_validation(code_id):
